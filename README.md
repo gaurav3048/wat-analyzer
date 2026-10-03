@@ -84,10 +84,4 @@ Default credentials: `username: gaurav` | `password: password123`.
 
 ---
 
-## 💼 Resume Bullets (Tailored for Full-Stack / MERN Developer Roles)
 
-- **AI-Powered Psychometric Assessment Platform (MERN + Python AI Microservice)**:
-  - Architected a full-stack psychometric testing platform using **React, Node.js, Express, and MongoDB**, decoupled from a **Python AI microservice** for transformer inference.
-  - Implemented secure JWT authentication and password hashing with **12-round Bcrypt**, designing idempotent REST endpoints to prevent duplicate test submissions.
-  - Modeled document schemas in **MongoDB** to store dynamic, nested psychometric trait vectors, speech telemetry (WPM, filler words), and emotional distributions without relational table overhead.
-  - Connected the Express gateway to a Python microservice hosting **DistilBERT**, **RoBERTa**, and **Sentence-BERT** models, performing cosine similarity against psychological trait anchors and leave-one-out token perturbation for explainable AI (XAI).
