@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+env/
+.env
+
+# Cache and temporary files
+__pycache__/
+*.pyc
+.vite/
+dist/
+build/
+
+# Database
+*.db
+*.db-*
+
+# Logs
+*.log
+api_logs.txt
+
+# OS files
+.DS_Store
+Thumbs.db
