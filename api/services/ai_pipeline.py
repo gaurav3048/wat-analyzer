@@ -267,8 +267,6 @@ _trait_anchors = {}
 
 def get_trait_similarity(text_embedding: List[float], text: str = "", prompt_word: str = "") -> Dict[str, float]:
     """Compute semantic similarity against trait anchors."""
-    global _trait_anchors
-    
     traits = ["positivity", "emotional_stability", "agency", "leadership", "responsibility", "empathy", "clarity"]
     
     if is_gibberish(text, prompt_word):
