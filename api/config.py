@@ -6,7 +6,6 @@ load_dotenv()
 
 class Settings(BaseSettings):
     APP_NAME: str = "WAT Analyzer"
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./wat_analyzer.db")
     SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me-in-production-super-secret-key-2024")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days

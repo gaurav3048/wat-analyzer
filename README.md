@@ -45,8 +45,9 @@ The platform uses a **Polyglot Microservices Architecture** to separate high-con
    - Stateless JWT Bearer token authentication.
    - Mongoose ODM managing MongoDB connections.
 3. **Database (MongoDB)**:
-   - Running on Port `27017` (`wat_analyzer` database).
-   - Document-oriented schema: perfectly handles nested psychometric trait scores, emotion distributions, and token attribution arrays without relational SQL joins.
+   - MongoDB is the application's only database. The Express backend connects through Mongoose to `mongodb://127.0.0.1:27017/wat_analyzer` by default; set `MONGODB_URI` to use another MongoDB connection.
+   - It stores users, prompts, and assessment sessions, including nested psychometric and speech-analysis data.
+   - The Python AI service does not access a database. PostgreSQL and SQLAlchemy/Alembic are not part of the current application.
 4. **AI Inference Microservice (Python FastAPI)**:
    - Running on Port `8000`.
    - **DistilBERT** (`distilbert-base-uncased-finetuned-sst-2-english`) for sentiment polarity.
@@ -62,7 +63,7 @@ The platform uses a **Polyglot Microservices Architecture** to separate high-con
 Double-click `run_all.bat` to launch all 3 tiers simultaneously.
 
 ### Method 2: Manual Terminal Commands
-1. **Start MongoDB**: Ensure MongoDB service is running on `127.0.0.1:27017`.
+1. **Start MongoDB**: Ensure MongoDB service is running on `127.0.0.1:27017` (or configure `MONGODB_URI` for your instance). This is the database used by the application backend.
 2. **Start Python AI Microservice (Port 8000)**:
    ```bash
    cd api
@@ -81,6 +82,13 @@ Double-click `run_all.bat` to launch all 3 tiers simultaneously.
 
 Open your browser at **`http://localhost:3000`**.
 Default credentials: `username: gaurav` | `password: password123`.
+
+### Method 3: Docker Compose (Python API + Frontend)
+From the project root, run:
+```bash
+docker compose up --build
+```
+This starts the Python API and frontend only. It does not start the Express backend or MongoDB; use the Windows launcher or manual commands above to run the full application.
 
 ---
 
