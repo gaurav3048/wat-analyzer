@@ -107,9 +107,8 @@ def ai_analyze_session(payload: dict):
         prompt_word = resp.get("prompt_word", "")
         wpm = resp.get("wpm")
         filler = resp.get("filler_count")
-        composure = resp.get("composure_score")
 
-        analysis = analyze_single_response(user_text, wpm, filler, composure, prompt_word=prompt_word)
+        analysis = analyze_single_response(user_text, wpm, filler, prompt_word=prompt_word)
         trait_scores = analysis.get("trait_scores", {})
         trait_scores_list.append(trait_scores)
 
@@ -125,13 +124,12 @@ def ai_analyze_session(payload: dict):
             "user_text": user_text,
             "wpm": wpm,
             "filler_count": filler,
-            "composure_score": composure,
             "sentiment_scores": analysis.get("sentiment_scores"),
             "emotion_scores": analysis.get("emotion_scores"),
             "trait_scores": trait_scores,
             "domain_traits": domain_traits,
             "token_highlights": token_highlights,
-            "features": analysis.get("features"),
+            "is_gibberish": analysis.get("is_gibberish"),
         })
 
     overall_scores = compute_session_averages(trait_scores_list)

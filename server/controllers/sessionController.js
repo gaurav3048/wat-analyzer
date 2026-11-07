@@ -93,7 +93,6 @@ export const submitSession = async (req, res) => {
           user_text: r.user_text || '',
           wpm: r.wpm || 0,
           filler_count: r.filler_count || 0,
-          composure_score: r.composure_score || 0.5,
         };
       })
     );
@@ -170,11 +169,10 @@ export const getSessionResults = async (req, res) => {
         trait_scores: r.trait_scores,
         domain_traits: r.domain_traits || [],
         token_highlights: r.token_highlights || [],
-        features: r.features,
+        is_gibberish: r.is_gibberish,
         order_index: r.order_index,
         wpm: r.wpm,
         filler_count: r.filler_count,
-        composure_score: r.composure_score,
       })),
       timer_seconds: session.timer_seconds,
     });
@@ -380,10 +378,7 @@ function evaluateLocally(responses, module = 'ssb') {
       id: i + 1,
       trait_scores: traitScores,
       token_highlights: highlights,
-      features: {
-        word_count: text.split(/\s+/).filter(Boolean).length,
-        is_gibberish: gibberish,
-      },
+      is_gibberish: gibberish,
       domain_traits: [
         {
           trait: 'leadership',

@@ -10,13 +10,12 @@ const responseItemSchema = new mongoose.Schema(
     user_text: { type: String, default: '' },
     wpm: { type: Number, default: 0 },
     filler_count: { type: Number, default: 0 },
-    composure_score: { type: Number, default: 0.5 },
     sentiment_scores: { type: mongoose.Schema.Types.Mixed, default: null },
     emotion_scores: { type: mongoose.Schema.Types.Mixed, default: null },
     trait_scores: { type: mongoose.Schema.Types.Mixed, default: null },
     domain_traits: { type: [mongoose.Schema.Types.Mixed], default: [] },
     token_highlights: { type: [mongoose.Schema.Types.Mixed], default: null },
-    features: { type: mongoose.Schema.Types.Mixed, default: null },
+    is_gibberish: { type: Boolean, default: false },
   },
   { _id: false }
 );

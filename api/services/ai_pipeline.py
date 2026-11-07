@@ -226,43 +226,6 @@ def compute_embedding(text: str, prompt_word: str = "") -> List[float]:
     
     return [0.0] * 384
 
-def extract_features(text: str, prompt_word: str = "") -> Dict[str, Any]:
-    """Extract linguistic markers from text (pronouns, passive voice, action verbs)."""
-    if not text.strip() or is_gibberish(text, prompt_word):
-        return {
-            "word_count": len(text.split()), "first_person": 0, "third_person": 0,
-            "agency_verb_count": 0, "passive_voice": False,
-            "content_word_ratio": 0.0, "has_action": False,
-            "is_gibberish": True
-        }
-    
-    words = text.lower().split()
-    word_count = len(words)
-    
-    first_person = sum(1 for w in words if w in {"i", "me", "my", "mine", "myself", "we", "our", "us"})
-    third_person = sum(1 for w in words if w in {"he", "she", "they", "them", "their", "his", "her", "it"})
-    
-    has_action = any(w.endswith("ed") or w.endswith("ing") for w in words)
-    agency_count = 1 if has_action else 0
-    
-    passive_pattern = re.compile(r'\b(was|were|been|being|is|are|am)\s+\w+ed\b', re.IGNORECASE)
-    has_passive = bool(passive_pattern.search(text))
-    
-    function_words = {"the", "a", "an", "is", "are", "was", "were", "in", "on", "at", "to", "for", "of", "and", "but", "or", "if", "then"}
-    content_words = [w for w in words if w not in function_words and len(w) > 2 and w in COMMON_ENGLISH_WORDS]
-    content_ratio = len(content_words) / max(word_count, 1)
-    
-    return {
-        "word_count": word_count,
-        "first_person": first_person,
-        "third_person": third_person,
-        "agency_verb_count": agency_count,
-        "passive_voice": has_passive,
-        "content_word_ratio": round(content_ratio, 3),
-        "has_action": agency_count > 0,
-        "is_gibberish": False
-    }
-
 _trait_anchors = {}
 
 def get_trait_similarity(text_embedding: List[float], text: str = "", prompt_word: str = "") -> Dict[str, float]:
@@ -322,15 +285,13 @@ def get_trait_similarity(text_embedding: List[float], text: str = "", prompt_wor
 def compute_trait_vector(
     sentiment: Dict[str, float],
     emotions: Dict[str, float],
-    features: Dict[str, Any],
     embedding: List[float] = None,
     wpm: Optional[float] = None,
     filler_count: Optional[int] = None,
-    composure_score: Optional[float] = None,
     text: str = "",
     prompt_word: str = ""
 ) -> Dict[str, float]:
-    """Combine NLP outputs and linguistic indicators into a standardized psychological trait vector."""
+    """Combine NLP outputs into a standardized psychological trait vector."""
     if is_gibberish(text, prompt_word):
         return {
             "positivity": 0.08,
@@ -352,16 +313,11 @@ def compute_trait_vector(
     stability_base = max(0.0, min(1.0, 0.5 + (pos_emotions - neg_emotions) * 0.5))
     emotional_stability = (stability_base * 0.6) + (similarities.get("emotional_stability", 0.5) * 0.4)
     
-    first_person = min(features.get("first_person", 0) / 2.0, 0.5)
-    agency = (similarities.get("agency", 0.5) * 0.7) + (first_person * 0.3)
+    agency = similarities.get("agency", 0.5)
     leadership = (similarities.get("leadership", 0.5) * 0.6) + (agency * 0.4)
-    responsibility = (similarities.get("responsibility", 0.5) * 0.6) + (first_person * 0.4)
-    
-    third_person = min(features.get("third_person", 0) / 2.0, 0.5)
-    empathy = (similarities.get("empathy", 0.5) * 0.7) + (third_person * 0.3)
-    
-    content_ratio = features.get("content_word_ratio", 0)
-    clarity = (similarities.get("clarity", 0.5) * 0.5) + (content_ratio * 0.5)
+    responsibility = similarities.get("responsibility", 0.5)
+    empathy = similarities.get("empathy", 0.5)
+    clarity = similarities.get("clarity", 0.5)
     
     # Modifiers for speech pace & fillers if present
     if wpm is not None:
@@ -375,10 +331,6 @@ def compute_trait_vector(
         clarity = max(0.0, clarity - penalty)
         emotional_stability = max(0.0, emotional_stability - (penalty / 2))
         
-    if composure_score is not None:
-        emotional_stability = (emotional_stability * 0.5) + (composure_score * 0.5)
-        positivity = (positivity * 0.7) + (composure_score * 0.3)
-    
     return {
         "positivity": round(max(0.0, min(1.0, positivity)), 3),
         "emotional_stability": round(max(0.0, min(1.0, emotional_stability)), 3),
@@ -407,9 +359,8 @@ def compute_token_highlights(text: str, trait_scores: Dict[str, float], prompt_w
     
     base_sentiment = analyze_sentiment(clean_text, prompt_word)
     base_emotions = analyze_emotions(clean_text, prompt_word)
-    base_features = extract_features(clean_text, prompt_word)
     base_embedding = compute_embedding(clean_text, prompt_word)
-    base_traits = compute_trait_vector(base_sentiment, base_emotions, base_features, base_embedding, text=clean_text, prompt_word=prompt_word)
+    base_traits = compute_trait_vector(base_sentiment, base_emotions, base_embedding, text=clean_text, prompt_word=prompt_word)
     
     highlights = []
     for i, word in enumerate(words):
@@ -420,9 +371,8 @@ def compute_token_highlights(text: str, trait_scores: Dict[str, float], prompt_w
         
         red_sentiment = analyze_sentiment(reduced, prompt_word)
         red_emotions = analyze_emotions(reduced, prompt_word)
-        red_features = extract_features(reduced, prompt_word)
         red_embedding = compute_embedding(reduced, prompt_word)
-        red_traits = compute_trait_vector(red_sentiment, red_emotions, red_features, red_embedding, text=reduced, prompt_word=prompt_word)
+        red_traits = compute_trait_vector(red_sentiment, red_emotions, red_embedding, text=reduced, prompt_word=prompt_word)
         
         total_impact = 0.0
         influenced_traits = []
@@ -441,26 +391,17 @@ def compute_token_highlights(text: str, trait_scores: Dict[str, float], prompt_w
     
     return highlights
 
-def analyze_single_response(text: str, wpm: Optional[float] = None, filler_count: Optional[int] = None, composure_score: Optional[float] = None, prompt_word: str = "") -> Dict[str, Any]:
+def analyze_single_response(text: str, wpm: Optional[float] = None, filler_count: Optional[int] = None, prompt_word: str = "") -> Dict[str, Any]:
     """Execute complete analysis pipeline for an individual response."""
     sentiment = analyze_sentiment(text, prompt_word)
     emotions = analyze_emotions(text, prompt_word)
-    features = extract_features(text, prompt_word)
     embedding = compute_embedding(text, prompt_word)
-    traits = compute_trait_vector(sentiment, emotions, features, embedding, wpm, filler_count, composure_score, text=text, prompt_word=prompt_word)
+    traits = compute_trait_vector(sentiment, emotions, embedding, wpm, filler_count, text=text, prompt_word=prompt_word)
     
     return {
         "sentiment_scores": sentiment,
         "emotion_scores": emotions,
-        "features": features,
-        "embedding": embedding,
-        "trait_scores": traits,
-    }
-    
-    return {
-        "sentiment_scores": sentiment,
-        "emotion_scores": emotions,
-        "features": features,
+        "is_gibberish": is_gibberish(text, prompt_word),
         "embedding": embedding,
         "trait_scores": traits,
     }
@@ -472,8 +413,7 @@ def analyze_session_responses(responses: List[Dict[str, Any]]) -> List[Dict[str,
         text = resp.get("user_text", "")
         wpm = resp.get("wpm")
         filler = resp.get("filler_count")
-        composure = resp.get("composure_score")
-        analysis = analyze_single_response(text, wpm, filler, composure)
+        analysis = analyze_single_response(text, wpm, filler)
         results.append(analysis)
     return results
 

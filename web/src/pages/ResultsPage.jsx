@@ -110,7 +110,7 @@ export default function ResultsPage() {
   }
 
   const hasLowCoherence = results?.responses?.some(
-    r => r.features?.is_gibberish || (r.trait_scores && Object.values(r.trait_scores).reduce((a, b) => a + b, 0) / 7 < 0.20)
+    r => r.is_gibberish || (r.trait_scores && Object.values(r.trait_scores).reduce((a, b) => a + b, 0) / 7 < 0.20)
   ) || (results?.overall_scores && Object.values(results.overall_scores).reduce((a, b) => a + b, 0) / 7 < 0.25);
 
   return (
@@ -239,7 +239,7 @@ function ResponseCard({ response, index, expanded, onToggle, highlights, onRewri
   const avgScore = response.trait_scores
     ? Object.values(response.trait_scores).reduce((a, b) => a + b, 0) / Object.values(response.trait_scores).length
     : 0;
-  const isGibberish = response.features?.is_gibberish || avgScore < 0.20;
+  const isGibberish = response.is_gibberish || avgScore < 0.20;
   const isWeak = avgScore < 0.40 && !isGibberish;
 
   return (
@@ -268,7 +268,7 @@ function ResponseCard({ response, index, expanded, onToggle, highlights, onRewri
           <TraitBars traits={response.trait_scores} />
           
           {/* Multi-modal metrics */}
-          {(response.wpm > 0 || response.filler_count > 0 || response.composure_score > 0) && (
+          {(response.wpm > 0 || response.filler_count > 0) && (
             <div className="flex flex-wrap gap-4 p-4 rounded-xl bg-surface-800/50 border border-white/5">
               {response.wpm > 0 && (
                 <div className="flex items-center gap-2">
@@ -283,17 +283,8 @@ function ResponseCard({ response, index, expanded, onToggle, highlights, onRewri
                 <div className="flex items-center gap-2">
                   <span className="text-xl">⚠️</span>
                   <div>
-                    <div className="text-xs text-white/50">Filler Words</div>
+                    <div className="text-xs text-white/50">Possible Fillers</div>
                     <div className="font-mono text-sm text-amber-400">{response.filler_count}</div>
-                  </div>
-                </div>
-              )}
-              {response.composure_score !== null && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">👤</span>
-                  <div>
-                    <div className="text-xs text-white/50">Facial Composure</div>
-                    <div className="font-mono text-sm text-emerald-400">{Math.round(response.composure_score * 100)}%</div>
                   </div>
                 </div>
               )}

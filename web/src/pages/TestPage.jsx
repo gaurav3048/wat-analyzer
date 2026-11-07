@@ -11,6 +11,7 @@ const MODULE_META = {
 
 const TIMER_DEFAULTS = { ssb: 15, interview: 15, student: 20, workplace: 20 };
 const COUNT_DEFAULTS = { ssb: 15, interview: 15, student: 12, workplace: 12 };
+const FILLER_PATTERN = /\b(?:um|uh|uhm|er|erm)\b/gi;
 
 export default function TestPage() {
   const { module } = useParams();
@@ -23,17 +24,17 @@ export default function TestPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   
   const [responses, setResponses] = useState([]);
-  const [metrics, setMetrics] = useState([]); // { wpm, filler_count, composure_score }
+  const [metrics, setMetrics] = useState([]); // { wpm, filler_count }
   
   const [currentText, setCurrentText] = useState('');
   const [timeLeft, setTimeLeft] = useState(0);
   const [timerDuration, setTimerDuration] = useState(TIMER_DEFAULTS[module] || 15);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [speechError, setSpeechError] = useState('');
 
-  // Multi-modal state
+  // Voice input and response metrics
   const [isRecording, setIsRecording] = useState(false);
-  const [composureScore, setComposureScore] = useState(85);
   const [fillersDetected, setFillersDetected] = useState(0);
   const [wordCount, setWordCount] = useState(0);
   const [startTime, setStartTime] = useState(0);
@@ -41,60 +42,69 @@ export default function TestPage() {
   const inputRef = useRef(null);
   const timerRef = useRef(null);
   const recognitionRef = useRef(null);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
+  const recognitionActiveRef = useRef(false);
 
-  // Setup Web Speech API and Webcam
+  // Setup Web Speech API
   useEffect(() => {
     if (phase === 'test') {
-      // 1. Setup Speech Recognition
+      // Setup browser speech recognition
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
-        recognitionRef.current.lang = 'en-IN'; // Can alternate to hi-IN based on selection
-        
-        recognitionRef.current.onresult = (event) => {
-          let finalTranscript = '';
-          let interimTranscript = '';
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            } else {
-              interimTranscript += event.results[i][0].transcript;
-            }
-          }
-          if (finalTranscript) {
-            setCurrentText(prev => prev ? prev + ' ' + finalTranscript : finalTranscript);
-          }
-        };
+      if (!SpeechRecognition) {
+        setSpeechError('Voice transcription is not supported in this browser. You can type your response instead.');
+        return;
       }
 
-      // 2. Setup Webcam (Mock facial analysis)
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-IN';
+
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
           }
-        })
-        .catch(err => console.warn("Webcam access denied", err));
-
-      // 3. Simulated Face Tracking Polling
-      const faceInterval = setInterval(() => {
-        setComposureScore(prev => {
-          const jitter = (Math.random() * 10) - 5;
-          return Math.min(100, Math.max(0, prev + jitter));
-        });
-      }, 1000);
-
-      return () => {
-        clearInterval(faceInterval);
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
+        }
+        if (finalTranscript) {
+          setCurrentText(prev => prev ? prev + ' ' + finalTranscript : finalTranscript);
         }
       };
+
+      recognition.onerror = (event) => {
+        const wasActive = recognitionActiveRef.current;
+        recognitionActiveRef.current = false;
+        setIsRecording(false);
+        if (event.error === 'aborted' && !wasActive) return;
+
+        const messages = {
+          'not-allowed': 'Microphone permission was denied. Allow microphone access in your browser and try again.',
+          'service-not-allowed': 'Speech recognition is blocked by the browser. Check your microphone and site permissions.',
+          'audio-capture': 'No microphone was found. Connect a microphone or type your response.',
+          'no-speech': 'No speech was detected. Click the microphone to try again.',
+          network: 'Speech recognition is unavailable due to a network error. Try again or type your response.',
+        };
+        setSpeechError(messages[event.error] || 'Speech recognition stopped with an error. Click the microphone to try again.');
+      };
+
+      recognition.onend = () => {
+        const endedUnexpectedly = recognitionActiveRef.current;
+        recognitionActiveRef.current = false;
+        setIsRecording(false);
+        if (endedUnexpectedly) {
+          setSpeechError('Speech recognition stopped unexpectedly. Click the microphone to resume.');
+        }
+      };
+
+      return () => {
+        if (recognitionActiveRef.current) {
+          recognitionActiveRef.current = false;
+          recognition.stop();
+        }
+        recognitionRef.current = null;
+      };
+
     }
   }, [phase]);
 
@@ -102,17 +112,31 @@ export default function TestPage() {
   useEffect(() => {
     const words = currentText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
     setWordCount(words.length);
-    const fillers = words.filter(w => ['um', 'uh', 'like', 'uhm', 'so', 'anyway'].includes(w)).length;
-    setFillersDetected(fillers);
+    setFillersDetected((currentText.match(FILLER_PATTERN) || []).length);
   }, [currentText]);
 
   const toggleRecording = () => {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      setSpeechError('Voice transcription is unavailable. You can type your response instead.');
+      return;
+    }
+
     if (isRecording) {
-      if (recognitionRef.current) recognitionRef.current.stop();
+      recognitionActiveRef.current = false;
+      recognition.stop();
       setIsRecording(false);
     } else {
-      if (recognitionRef.current) recognitionRef.current.start();
-      setIsRecording(true);
+      setSpeechError('');
+      try {
+        recognitionActiveRef.current = true;
+        recognition.start();
+        setIsRecording(true);
+      } catch {
+        recognitionActiveRef.current = false;
+        setIsRecording(false);
+        setSpeechError('Could not start speech recognition. Check microphone permission and try again.');
+      }
     }
   };
 
@@ -146,16 +170,10 @@ export default function TestPage() {
     setPhase('submitting');
     if (timerRef.current) clearInterval(timerRef.current);
     
-    // Stop webcam
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-    }
-
     const currentResp = lastText !== undefined ? lastText : currentText;
     const currentMet = lastMetrics || {
       wpm: 0,
       filler_count: fillersDetected,
-      composure_score: composureScore / 100
     };
 
     const finalResponses = [...responses];
@@ -170,7 +188,6 @@ export default function TestPage() {
         user_text: finalResponses[i] || '',
         wpm: finalMetrics[i]?.wpm || 0,
         filler_count: finalMetrics[i]?.filler_count || 0,
-        composure_score: finalMetrics[i]?.composure_score || 0.5,
       })),
     };
 
@@ -190,6 +207,7 @@ export default function TestPage() {
   };
 
   const advanceToNext = useCallback(() => {
+    recognitionActiveRef.current = false;
     if (isRecording && recognitionRef.current) recognitionRef.current.stop();
     setIsRecording(false);
 
@@ -200,7 +218,6 @@ export default function TestPage() {
     const currentMetric = {
       wpm: normWpm,
       filler_count: fillersDetected,
-      composure_score: composureScore / 100,
     };
 
     setResponses(prev => {
@@ -225,7 +242,7 @@ export default function TestPage() {
       setTimeLeft(timerDuration);
       setStartTime(Date.now());
     }
-  }, [currentIndex, currentText, prompts.length, timerDuration, isRecording, wordCount, fillersDetected, composureScore, startTime, responses, metrics, sessionId]);
+  }, [currentIndex, currentText, prompts.length, timerDuration, isRecording, wordCount, fillersDetected, startTime, responses, metrics, sessionId]);
 
   useEffect(() => {
     advanceRef.current = advanceToNext;
@@ -294,12 +311,11 @@ export default function TestPage() {
             </div>
 
             <div className="p-4 rounded-xl bg-primary-500/10 border border-primary-500/20">
-              <h4 className="font-semibold text-primary-300 mb-2">🎙️ Multi-Modal Rules</h4>
+              <h4 className="font-semibold text-primary-300 mb-2">🎙️ Voice Input</h4>
               <ul className="text-sm text-white/50 space-y-1">
-                <li>• This session tracks your Voice and Facial Expressions.</li>
-                <li>• Use the Microphone to speak your spontaneous thoughts.</li>
-                <li>• Our AI tracks "Filler Words" and "Words Per Minute".</li>
-                <li>• Allow camera access for the Composure tracker.</li>
+                <li>• Speak or type your response to the prompt.</li>
+                <li>• Speech recognition transcribes into the response box; edit the transcript as needed.</li>
+                <li>• Possible hesitation words and speaking pace are recorded for analysis.</li>
               </ul>
             </div>
 
@@ -320,8 +336,6 @@ export default function TestPage() {
     const progress = ((currentIndex + 1) / prompts.length) * 100;
     const timerPercent = (timeLeft / timerDuration) * 100;
     const timerColor = timeLeft <= 3 ? 'text-red-400' : timeLeft <= 7 ? 'text-amber-400' : 'text-primary-400';
-    const composureColor = composureScore > 80 ? 'text-emerald-400' : composureScore > 50 ? 'text-amber-400' : 'text-red-400';
-
     return (
       <div className="min-h-screen pt-20 px-4">
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -381,9 +395,11 @@ export default function TestPage() {
                   <p className="text-xs text-white/40">Speak naturally. Fillers and hesitations are tracked.</p>
                 </div>
                 <div className="text-right">
-                    <p className="text-xs text-white/40">Detected Fillers: <span className="font-mono text-amber-400">{fillersDetected}</span></p>
+                      <p className="text-xs text-white/40">Possible Fillers: <span className="font-mono text-amber-400">{fillersDetected}</span></p>
                 </div>
               </div>
+
+                    {speechError && <p role="alert" className="mb-3 text-sm text-amber-300">{speechError}</p>}
 
               <textarea
                 ref={inputRef}
@@ -404,7 +420,7 @@ export default function TestPage() {
             </div>
           </div>
 
-          {/* Sidebar - Camera & Timer */}
+          {/* Sidebar - Timer */}
           <div className="space-y-6">
             <div className="glass-card p-6 text-center animate-slide-up" style={{ animationDelay: '0.1s' }}>
               <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-4">Time Remaining</h3>
@@ -418,33 +434,6 @@ export default function TestPage() {
                     style={{ transition: 'stroke-dashoffset 1s linear' }} />
                 </svg>
                 <span className={`absolute text-3xl font-bold font-mono ${timerColor}`}>{timeLeft}</span>
-              </div>
-            </div>
-
-            <div className="glass-card p-4 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider">Live Video Stream</h3>
-                <span className="flex h-3 w-3 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                </span>
-              </div>
-              <div className="aspect-video bg-black rounded-lg overflow-hidden border border-white/10 relative">
-                <video ref={videoRef} autoPlay muted className="w-full h-full object-cover opacity-80" />
-                
-                {/* HUD Elements */}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <p className="text-[10px] text-white/40 font-mono mb-1">EMOTION ENGINE: ACTIVE</p>
-                      <p className="text-xs font-semibold">Composure Index</p>
-                    </div>
-                    <span className={`font-mono text-xl ${composureColor}`}>{composureScore.toFixed(0)}</span>
-                  </div>
-                  <div className="h-1 bg-white/20 mt-2 rounded">
-                    <div className={`h-full bg-current ${composureColor} rounded transition-all duration-300`} style={{width: `${composureScore}%`}} />
-                  </div>
-                </div>
               </div>
             </div>
 
